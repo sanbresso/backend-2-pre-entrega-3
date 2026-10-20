@@ -35,10 +35,8 @@ La Pre-entrega 3 amplía el módulo de sesiones con login, generación y verific
 
 ### 1. Clonar el repositorio
 
-Reemplazar `<URL-DEL-REPOSITORIO-DE-PRE-ENTREGA-3>` por la URL pública real cuando se publique en GitHub.
-
 ```bash
-git clone <URL-DEL-REPOSITORIO-DE-PRE-ENTREGA-3>
+git clone https://github.com/sanbresso/backend-2-pre-entrega-3.git
 cd backend-2-pre-entrega-3
 ```
 
@@ -52,7 +50,7 @@ npm install
 
 Crear un archivo `.env` en la raíz del proyecto, tomando como referencia `.env.example`.
 
-Ejemplo de configuración local:
+Ejemplo de configuración con MongoDB Atlas:
 
 ```dotenv
 PORT=8080
