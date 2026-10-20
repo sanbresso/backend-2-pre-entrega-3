@@ -1,7 +1,6 @@
-
 # Plataforma de Eventos e Inscripciones
 
-## Pre-entrega 2 — Registro Seguro de Usuarios
+## Pre-entrega 3 — Autenticación con JWT y cookies
 
 ## Descripción
 
@@ -9,7 +8,9 @@ Proyecto backend desarrollado como parte del curso **PBE II — Diseño y Arquit
 
 La aplicación está orientada a la gestión de eventos e inscripciones de usuarios.
 
-La Pre-entrega 1 estableció la arquitectura modular inicial. En esta segunda pre-entrega se incorpora el registro seguro de usuarios, incluyendo validaciones, normalización del email, hashing de contraseñas con bcrypt y persistencia en MongoDB mediante Mongoose.
+La Pre-entrega 1 estableció la arquitectura modular inicial y la Pre-entrega 2 incorporó el registro seguro de usuarios con bcrypt y persistencia en MongoDB mediante Mongoose.
+
+La Pre-entrega 3 amplía el módulo de sesiones con login, generación y verificación de JWT, almacenamiento en una cookie HttpOnly llamada `currentUser`, ruta protegida `/current` y logout.
 
 ## Tecnologías utilizadas
 
@@ -19,22 +20,26 @@ La Pre-entrega 1 estableció la arquitectura modular inicial. En esta segunda pr
 - MongoDB
 - Mongoose
 - bcrypt
+- jsonwebtoken
+- cookie-parser
 - dotenv
 - Git y GitHub
 
 ## Requisitos previos
 
 - Node.js y npm instalados.
-- MongoDB Community Server instalado y en ejecución.
-- Un cliente HTTP, como Postman o curl, para realizar las pruebas.
+- Acceso a MongoDB Atlas y un clúster configurado (requerido para la entrega). Para desarrollo local también se puede utilizar MongoDB Community Server.
+- Un cliente HTTP, como Thunder Client, Postman o curl, para realizar las pruebas.
 
 ## Instalación
 
 ### 1. Clonar el repositorio
 
+Reemplazar `<URL-DEL-REPOSITORIO-DE-PRE-ENTREGA-3>` por la URL pública real cuando se publique en GitHub.
+
 ```bash
-git clone https://github.com/sanbresso/backend-2-pre-entrega-2.git
-cd backend-2-pre-entrega-2
+git clone <URL-DEL-REPOSITORIO-DE-PRE-ENTREGA-3>
+cd backend-2-pre-entrega-3
 ```
 
 ### 2. Instalar las dependencias
@@ -52,13 +57,16 @@ Ejemplo de configuración local:
 ```dotenv
 PORT=8080
 NODE_ENV=development
-MONGO_URL=mongodb://127.0.0.1:27017/plataforma_eventos
-JWT_SECRET=reemplazar_por_clave_segura
+MONGO_URL=mongodb+srv://USUARIO:CONTRASENA@TU_CLUSTER.mongodb.net/plataforma_eventos
+JWT_SECRET=REEMPLAZAR_POR_CLAVE_SECRETA_SEGURA
+JWT_EXPIRES_IN=1h
 ```
 
-La variable `JWT_SECRET` queda preparada para futuros módulos de autenticación. Todavía no se utiliza en el registro.
+Para esta pre-entrega se utiliza **MongoDB Atlas** como servicio de base de datos en la nube. La conexión se configura mediante la variable de entorno `MONGO_URL`, utilizando la URI proporcionada por Atlas.
 
-El archivo `.env` está excluido del repositorio mediante `.gitignore` para evitar publicar información sensible.
+El archivo `.env` contiene las credenciales privadas de conexión y la clave `JWT_SECRET`, por lo que está excluido del repositorio mediante `.gitignore`.
+
+La variable `JWT_EXPIRES_IN=1h` establece una duración de una hora para el JWT, mientras que la cookie `currentUser` utiliza `maxAge: 3600000`.
 
 ### 4. Iniciar el servidor
 
@@ -109,9 +117,11 @@ src/
 ├── dao/
 │   └── users.dao.js
 ├── middlewares/
+│   ├── auth.middleware.js
 │   └── error.middleware.js
 └── utils/
-    └── hash.js
+    ├── hash.js
+    └── jwt.js
 ```
 
 ### Responsabilidades
@@ -122,7 +132,7 @@ src/
 - **Repositories:** proporcionan una interfaz de acceso a datos.
 - **DAO:** realizan las operaciones de persistencia.
 - **Models:** definen los esquemas de Mongoose.
-- **Utils:** contienen funciones reutilizables, como el hashing de contraseñas.
+- **Utils:** contienen funciones reutilizables para hashing, comparación de contraseñas y firma/verificación de JWT.
 - **Config:** contiene la configuración de conexión a MongoDB.
 - **Middlewares:** proporcionan procesamiento adicional y manejo de errores.
 
@@ -130,7 +140,9 @@ El flujo de registro sigue esta secuencia:
 
 **Router → Controller → Service → Repository → DAO → Modelo User → MongoDB**
 
-El servicio utiliza el helper de bcrypt para generar el hash de la contraseña antes de guardar al usuario.
+El servicio utiliza el helper de bcrypt para generar el hash de la contraseña antes de guardar al usuario. Para el login, el DAO obtiene expresamente el hash del usuario con `.select("+password")` y el servicio utiliza `comparePassword()` para verificar las credenciales.
+
+La lógica JWT está centralizada en `src/utils/jwt.js`; el middleware de `src/middlewares/auth.middleware.js` comprueba el token de la cookie y carga los datos públicos en `req.user`. Los controladores gestionan las respuestas HTTP y las cookies.
 
 ## Modelo User
 
@@ -300,11 +312,13 @@ Se utiliza `bcrypt.hash()` con factor de costo 10.
 
 El backend guarda solamente el hash de la contraseña, nunca su valor original.
 
-Para verificar contraseñas en una futura implementación del login, el helper incluye `bcrypt.compare()`.
+Para validar las credenciales durante el login, el helper utiliza `bcrypt.compare()`.
 
 El modelo `User` configura `select: false` para el campo `password`, y el servicio construye la respuesta utilizando únicamente campos permitidos.
 
 ### Medidas de seguridad implementadas
+
+La firma JWT nunca debe configurarse con una clave expuesta públicamente. En desarrollo, `secure` es `false` para permitir pruebas por HTTP local; en producción debe usarse HTTPS y `secure: true`. Para sistemas expuestos a internet, considerar también mitigaciones CSRF y limitación de intentos de login.
 
 - Validaciones de entrada en el backend.
 - Normalización del correo electrónico.
@@ -318,9 +332,9 @@ El modelo `User` configura `select: false` para el campo `password`, y el servic
 
 ## Verificación en MongoDB
 
-Abrir MongoDB Compass y conectarse a:
+Para pruebas locales, abrir MongoDB Compass y conectarse a `mongodb://127.0.0.1:27017`.
 
-`mongodb://127.0.0.1:27017`
+**Para la entrega, verificar además la conexión con el clúster de MongoDB Atlas** configurado en el archivo `.env` privado. La conexión debe estar operativa antes de publicar la entrega.
 
 Ingresar a:
 
@@ -335,6 +349,137 @@ Los documentos registrados deben contener:
 La contraseña original no debe aparecer en la base de datos ni en las respuestas de la API.
 
 Esta verificación permite confirmar la persistencia efectiva mediante Mongoose y el correcto tratamiento de datos sensibles.
+
+## Resumen de rutas HTTP
+
+| Método | Ruta | Descripción | Respuestas principales |
+|---|---|---|---|
+| GET | `/api/health` | Verifica el estado del servidor | 200 |
+| GET | `/api/events` | Lista los eventos | 200 |
+| GET | `/api/sessions` | Información del módulo de sesiones | 200 |
+| POST | `/api/sessions/register` | Registra un usuario | 201, 400, 409, 500 |
+| POST | `/api/sessions/login` | Valida credenciales y crea la cookie `currentUser` | 200, 400, 401, 500 |
+| GET | `/api/sessions/current` | Devuelve datos públicos del usuario autenticado | 200, 401 |
+| POST | `/api/sessions/logout` | Elimina la cookie de autenticación | 200 |
+
+El ejemplo de request/response del registro se encuentra en **Endpoint de registro**. Los ejemplos de las demás rutas se detallan a continuación.
+
+## Login, JWT, cookie y cierre de sesión
+
+### POST /api/sessions/login
+
+**Request** (`Content-Type: application/json`):
+
+```json
+{
+  "email": "ana.prueba.20261020@example.com",
+  "password": "PruebaSegura123!"
+}
+```
+
+El servicio valida que ambos campos estén presentes, normaliza el email, busca al usuario y compara la contraseña con el hash almacenado usando bcrypt. La firma JWT se realiza con `JWT_SECRET` del entorno, incluye `id`, `email`, `role` y vence según `JWT_EXPIRES_IN`.
+
+**Response HTTP 200 OK:**
+
+```json
+{
+  "status": "success",
+  "message": "Login correcto"
+}
+```
+
+La respuesta también incluye un encabezado `Set-Cookie` con `currentUser`, configurado con `HttpOnly`, `SameSite=Lax`, `Max-Age=3600` y `Secure` únicamente cuando `NODE_ENV=production`. El JWT no se devuelve en el cuerpo JSON.
+
+**Response HTTP 400 (campos faltantes):**
+
+```json
+{
+  "status": "error",
+  "message": "Email y contraseña son obligatorios"
+}
+```
+
+**Response HTTP 401 (email inexistente o contraseña incorrecta):**
+
+```json
+{
+  "status": "error",
+  "message": "Credenciales inválidas"
+}
+```
+
+Se utiliza el mismo mensaje para no revelar cuál de las credenciales falló.
+
+### GET /api/sessions/current
+
+**Request:**
+
+```http
+GET /api/sessions/current
+Cookie: currentUser=<JWT_VALIDO>
+```
+
+La cookie se envía automáticamente si el cliente HTTP la conserva. El middleware `authMiddleware` verifica el JWT y adjunta los campos públicos a `req.user`.
+
+**Response HTTP 200 OK:**
+
+```json
+{
+  "status": "success",
+  "payload": {
+    "id": "ID_GENERADO_POR_MONGODB",
+    "email": "ana.prueba.20261020@example.com",
+    "role": "user"
+  }
+}
+```
+
+**Response HTTP 401 (cookie ausente, token inválido o expirado):**
+
+```json
+{
+  "status": "error",
+  "message": "No autenticado"
+}
+```
+
+### POST /api/sessions/logout
+
+**Request:**
+
+```http
+POST /api/sessions/logout
+Cookie: currentUser=<JWT_VALIDO>
+```
+
+No requiere body. El servidor borra la cookie `currentUser` con `res.clearCookie()`.
+
+**Response HTTP 200 OK:**
+
+```json
+{
+  "status": "success",
+  "message": "Sesión cerrada"
+}
+```
+
+Tras el logout, `/current` devuelve 401 si el cliente deja de enviar la cookie. Borrar una cookie no revoca criptográficamente un JWT que alguien hubiera conservado; el token seguiría siendo válido hasta su vencimiento salvo que se implemente revocación adicional.
+
+### Pruebas realizadas de autenticación
+
+| Caso | Resultado verificado |
+|---|---|
+| Registro válido sin exponer password | Usuario creado |
+| Login correcto y cookie `currentUser` | 200 |
+| `/current` con cookie válida | 200, datos públicos |
+| `/current` sin cookie | 401, `No autenticado` |
+| Logout y `/current` después de cerrar sesión | 200 y luego 401 |
+| Login con email inexistente | 401 |
+| Login con contraseña incorrecta | 401 |
+| `/current` con token mal formado | 401, `No autenticado` |
+| `/current` con token expirado | 401, `No autenticado` |
+
+Como evidencia adicional se pueden adjuntar capturas de Thunder Client/Postman del login (`Set-Cookie`), `/current` con cookie (200) y `/current` sin cookie (401). Ocultar siempre los valores de JWT y las credenciales privadas.
 
 ## Otros endpoints disponibles
 
@@ -365,7 +510,7 @@ Esta verificación permite confirmar la persistencia efectiva mediante Mongoose 
 }
 ```
 
-Estos endpoints se mantienen desde la Pre-entrega 1.
+Estos endpoints se mantienen desde la Pre-entrega 1. Para `GET /api/health`, `GET /api/events` y `GET /api/sessions`, los ejemplos de request son respectivamente `GET /api/health`, `GET /api/events` y `GET /api/sessions`, sin body, y sus respuestas 200 son las mostradas arriba.
 
 ## Estado del proyecto
 
@@ -388,11 +533,16 @@ Estos endpoints se mantienen desde la Pre-entrega 1.
 - Respuestas HTTP sin datos sensibles.
 - Pruebas de registro exitoso y manejo de errores.
 
-## Próximas funcionalidades
+### Pre-entrega 3
 
-- Login de usuarios.
-- Autenticación mediante JWT.
-- Cookies y sesiones.
+- Login con validación de credenciales y mensajes genéricos ante errores.
+- Generación de JWT firmado mediante variable de entorno.
+- Cookie HttpOnly `currentUser` y expiración configurable.
+- Middleware de autenticación y ruta protegida `/current`.
+- Logout con eliminación de cookie.
+- Pruebas de acceso válido, sin cookie, con token inválido y expirado.
+
+## Próximas funcionalidades
 - Passport.
 - Autorización por roles.
 - CRUD completo de eventos.

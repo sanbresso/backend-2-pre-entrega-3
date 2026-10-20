@@ -1,9 +1,12 @@
 import {
   getUserByEmail,
+  getUserByEmailWithPassword,
   saveUser
 } from "../repositories/users.repository.js";
 
-import { hashPassword } from "../utils/hash.js";
+import { hashPassword, comparePassword } from "../utils/hash.js";
+
+import { generateToken } from "../utils/jwt.js";
 
 const createHttpError = (statusCode, message) => {
   const error = new Error(message);
@@ -85,4 +88,53 @@ export const registerUser = async (userData = {}) => {
     email: newUser.email,
     role: newUser.role
   };
+};
+
+export const loginUser = async (credentials = {}) => {
+  const { email, password } = credentials ?? {};
+
+  if (
+    typeof email !== "string" ||
+    !email.trim() ||
+    typeof password !== "string" ||
+    !password
+  ) {
+    throw createHttpError(
+      400,
+      "Email y contraseña son obligatorios"
+    );
+  }
+
+  const normalizedEmail = email.trim().toLowerCase();
+
+  const user = await getUserByEmailWithPassword(
+    normalizedEmail
+  );
+
+  if (!user) {
+    throw createHttpError(
+      401,
+      "Credenciales inválidas"
+    );
+  }
+
+  const isValidPassword = await comparePassword(
+    password,
+    user.password
+  );
+
+  if (!isValidPassword) {
+    throw createHttpError(
+      401,
+      "Credenciales inválidas"
+    );
+  }
+
+  const token = generateToken({
+    id: user._id.toString(),
+    email: user.email,
+    role: user.role
+  });
+
+  return token;
 };
